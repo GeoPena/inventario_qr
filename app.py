@@ -1,15 +1,12 @@
 import streamlit as st
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import cv2
-from pyzbar.pyzbar import decode
-import numpy as np
+import streamlit.components.v1 as components
 
 # =========================
-# GOOGLE SHEETS AUTH (FIXED)
+# GOOGLE SHEETS AUTH
 # =========================
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -43,8 +40,8 @@ if "employee" not in st.session_state:
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
-if "last_message" not in st.session_state:
-    st.session_state.last_message = ""
+if "qr" not in st.session_state:
+    st.session_state.qr = ""
 
 # =========================
 # HELPERS
@@ -52,7 +49,7 @@ if "last_message" not in st.session_state:
 def reset_session():
     st.session_state.employee = ""
     st.session_state.cart = []
-    st.session_state.last_message = ""
+    st.session_state.qr = ""
     st.session_state.mode = "home"
 
 def find_row(asset_id):
@@ -64,41 +61,41 @@ def find_row(asset_id):
 
     return None, None
 
-def add_history(action, asset_id, employee="", notes=""):
+def add_history(action, asset_id, employee=""):
     history_sheet.append_row([
         str(datetime.now()),
         action,
         asset_id,
-        employee,
-        notes
+        employee
     ])
 
 # =========================
-# QR SCANNER CLASS (PRO MODE)
+# QR SCANNER (HTML5 PRO)
 # =========================
-class QRScanner(VideoTransformerBase):
+def qr_scanner():
+    scanner_html = """
+    <script src="https://unpkg.com/html5-qrcode"></script>
 
-    def __init__(self):
-        self.last_code = None
+    <div id="reader" style="width:100%;"></div>
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+    <script>
+    function onScanSuccess(decodedText) {
+        window.parent.postMessage({
+            type: "streamlit:setComponentValue",
+            value: decodedText
+        }, "*");
+    }
 
-        decoded = decode(img)
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: 250 }
+    );
 
-        for obj in decoded:
-            code = obj.data.decode("utf-8")
-            self.last_code = code
+    html5QrcodeScanner.render(onScanSuccess);
+    </script>
+    """
 
-            pts = obj.polygon
-            pts = np.array(pts, np.int32)
-            cv2.polylines(img, [pts], True, (0, 255, 0), 2)
-
-            cv2.putText(img, code, (50, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1,
-                        (0, 255, 0), 2)
-
-        return img
+    return components.html(scanner_html, height=400)
 
 # =========================
 # HOME
@@ -124,40 +121,35 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    employee = st.text_input("Employee Name", value=st.session_state.employee)
-    st.session_state.employee = employee
+    st.session_state.employee = st.text_input("Employee Name", st.session_state.employee)
 
-    # =========================
-    # 🔥 SCANNER EN VIVO
-    # =========================
-    st.subheader("📷 Live Scanner")
+    st.subheader("📷 Scan QR Code")
+    qr_value = qr_scanner()
 
-    ctx = webrtc_streamer(
-        key="scanner",
-        video_transformer_factory=QRScanner,
-        media_stream_constraints={"video": True, "audio": False}
-    )
+    # recibir QR del scanner
+    if qr_value:
+        st.session_state.qr = qr_value
 
-    if ctx.video_transformer:
-        code = ctx.video_transformer.last_code
+    # procesar QR
+    if st.session_state.qr:
+        code = st.session_state.qr
 
-        if code:
-            row_index, item = find_row(code)
+        row_index, item = find_row(code)
 
-            if not item:
-                st.error(f"{code} not found")
+        if not item:
+            st.error(f"{code} not found")
 
-            elif item["Status"] != "Available":
-                st.warning(f"{code} is {item['Status']}")
+        elif item["Status"] != "Available":
+            st.warning(f"{code} is {item['Status']}")
 
-            else:
-                if code not in st.session_state.cart:
-                    st.session_state.cart.append(code)
-                    st.success(f"Added {code}")
+        else:
+            if code not in st.session_state.cart:
+                st.session_state.cart.append(code)
+                st.success(f"Added {code}")
 
-    # =========================
+        st.session_state.qr = ""
+
     # CART
-    # =========================
     st.subheader("📦 Current Session")
     st.write(st.session_state.cart)
 
@@ -190,9 +182,7 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    notes = st.text_input("Optional Notes")
-
-    st.info("Usa el scanner en checkout o agregamos scanner aquí después")
+    st.info("Escaneo disponible en siguiente versión (ya tienes base lista)")
 
     if st.button("Done"):
         reset_session()
