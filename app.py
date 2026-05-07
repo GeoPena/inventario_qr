@@ -1,8 +1,12 @@
 import streamlit as st
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import cv2
+from pyzbar.pyzbar import decode
+import numpy as np
 
 # =========================
 # GOOGLE SHEETS AUTH (FIXED)
@@ -19,9 +23,6 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-# =========================
-# SHEETS
-# =========================
 inventory_sheet = client.open_by_url(
     "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 ).worksheet("Inventory")
@@ -73,7 +74,34 @@ def add_history(action, asset_id, employee="", notes=""):
     ])
 
 # =========================
-# HOME SCREEN
+# QR SCANNER CLASS (PRO MODE)
+# =========================
+class QRScanner(VideoTransformerBase):
+
+    def __init__(self):
+        self.last_code = None
+
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+
+        decoded = decode(img)
+
+        for obj in decoded:
+            code = obj.data.decode("utf-8")
+            self.last_code = code
+
+            pts = obj.polygon
+            pts = np.array(pts, np.int32)
+            cv2.polylines(img, [pts], True, (0, 255, 0), 2)
+
+            cv2.putText(img, code, (50, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1,
+                        (0, 255, 0), 2)
+
+        return img
+
+# =========================
+# HOME
 # =========================
 if st.session_state.mode == "home":
 
@@ -99,36 +127,37 @@ elif st.session_state.mode == "checkout":
     employee = st.text_input("Employee Name", value=st.session_state.employee)
     st.session_state.employee = employee
 
-    def add_asset():
-        asset = st.session_state.asset_input.strip()
+    # =========================
+    # 🔥 SCANNER EN VIVO
+    # =========================
+    st.subheader("📷 Live Scanner")
 
-        if not asset:
-            return
-
-        row_index, item = find_row(asset)
-
-        if not item:
-            st.session_state.last_message = f"❌ {asset} not found"
-            return
-
-        if item["Status"] != "Available":
-            st.session_state.last_message = f"⚠ {asset} is {item['Status']}"
-            return
-
-        if asset not in st.session_state.cart:
-            st.session_state.cart.append(asset)
-            st.session_state.last_message = f"✅ Added {asset}"
-
-        st.session_state.asset_input = ""
-
-    st.text_input(
-        "Scan AssetID",
-        key="asset_input",
-        on_change=add_asset
+    ctx = webrtc_streamer(
+        key="scanner",
+        video_transformer_factory=QRScanner,
+        media_stream_constraints={"video": True, "audio": False}
     )
 
-    st.write(st.session_state.last_message)
+    if ctx.video_transformer:
+        code = ctx.video_transformer.last_code
 
+        if code:
+            row_index, item = find_row(code)
+
+            if not item:
+                st.error(f"{code} not found")
+
+            elif item["Status"] != "Available":
+                st.warning(f"{code} is {item['Status']}")
+
+            else:
+                if code not in st.session_state.cart:
+                    st.session_state.cart.append(code)
+                    st.success(f"Added {code}")
+
+    # =========================
+    # CART
+    # =========================
     st.subheader("📦 Current Session")
     st.write(st.session_state.cart)
 
@@ -136,10 +165,6 @@ elif st.session_state.mode == "checkout":
 
         if not st.session_state.employee:
             st.error("Employee required")
-            st.stop()
-
-        if len(st.session_state.cart) == 0:
-            st.error("No assets scanned")
             st.stop()
 
         for asset in st.session_state.cart:
@@ -167,34 +192,7 @@ elif st.session_state.mode == "checkin":
 
     notes = st.text_input("Optional Notes")
 
-    def process_checkin():
-
-        asset = st.session_state.checkin_asset.strip()
-
-        if not asset:
-            return
-
-        row_index, item = find_row(asset)
-
-        if not item:
-            st.session_state.last_message = f"❌ {asset} not found"
-            return
-
-        inventory_sheet.update_cell(row_index, 9, "Available")
-        inventory_sheet.update_cell(row_index, 11, "")
-
-        add_history("Checkin", asset, "", notes)
-
-        st.session_state.last_message = f"✅ Checked in {asset}"
-        st.session_state.checkin_asset = ""
-
-    st.text_input(
-        "Scan AssetID",
-        key="checkin_asset",
-        on_change=process_checkin
-    )
-
-    st.write(st.session_state.last_message)
+    st.info("Usa el scanner en checkout o agregamos scanner aquí después")
 
     if st.button("Done"):
         reset_session()
