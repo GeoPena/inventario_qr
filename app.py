@@ -146,17 +146,20 @@ elif st.session_state.mode == "checkout":
         else:
 
             if qr_value not in st.session_state.cart:
-
-                st.session_state.cart.append(qr_value)
-
-                st.success(f"✅ Added {qr_value}")
+                item_name = item["Name"] if item and "Name" in item else "Unknown"
+                st.session_state.cart.append({
+                    "id": qr_value,
+                    "name": item_name
+                })
+                st.success(f"✅ Added {qr_value} — {item_name}")
 
     # =========================
     # CURRENT SESSION
     # =========================
     st.subheader("📦 Current Session")
 
-    st.write(st.session_state.cart)
+    for item in st.session_state.cart:
+        st.write(f"🔹 {item['id']} — {item['name']}")
 
     # =========================
     # PROCESS CHECKOUT
@@ -173,7 +176,8 @@ elif st.session_state.mode == "checkout":
             st.error("No assets scanned")
             st.stop()
 
-        for asset in st.session_state.cart:
+        for item in st.session_state.cart:
+            asset = item["id"]
 
             row_index, item = find_row(asset)
 
