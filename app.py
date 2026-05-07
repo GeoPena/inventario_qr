@@ -78,53 +78,40 @@ def qr_scanner():
 
     <div id="reader" style="width:100%;"></div>
 
-    <button id="startBtn" style="margin-top:10px;">
-        Start Scanner
-    </button>
+    <button id="startBtn">Start Scanner</button>
 
     <script>
 
-    let html5QrcodeScanner;
+    let scanner;
 
     document.getElementById("startBtn").onclick = function () {
 
-        if (html5QrcodeScanner) {
-            html5QrcodeScanner.clear();
-        }
-
-        html5QrcodeScanner = new Html5Qrcode("reader");
-
-        const config = {
-            fps: 10,
-            qrbox: 250,
-            facingMode: { exact: "environment" }   // 👈 CAMARA TRASERA
-        };
+        scanner = new Html5Qrcode("reader");
 
         Html5Qrcode.getCameras().then(devices => {
 
             let cameraId = devices[0].id;
 
-            // intenta encontrar cámara trasera
             devices.forEach(d => {
                 if (d.label.toLowerCase().includes("back")) {
                     cameraId = d.id;
                 }
             });
 
-            html5QrcodeScanner.start(
+            scanner.start(
                 cameraId,
-                config,
+                {
+                    fps: 10,
+                    qrbox: 250
+                },
                 (decodedText) => {
 
-                    // manda a streamlit
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: "streamlit:setComponentValue",
-                        value: decodedText
-                    }, "*");
+                    // 🔥 GUARDA EN SESSION STORAGE
+                    sessionStorage.setItem("qr_code", decodedText);
 
                 }
             );
+
         });
 
     };
@@ -132,7 +119,36 @@ def qr_scanner():
     </script>
     """
 
-    return components.html(scanner_html, height=500)
+    components.html(scanner_html, height=450)
+
+# =========================
+# BRIDGE (JS → STREAMLIT)
+# =========================
+def qr_bridge():
+
+    components.html("""
+    <script>
+
+    setInterval(() => {
+
+        const qr = sessionStorage.getItem("qr_code");
+
+        if (qr) {
+
+            const input = window.parent.document.querySelectorAll("input")[0];
+
+            if (input) {
+                input.value = qr;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+
+            sessionStorage.removeItem("qr_code");
+        }
+
+    }, 500);
+
+    </script>
+    """, height=0)
 
 # =========================
 # HOME
@@ -158,13 +174,24 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    st.session_state.employee = st.text_input("Employee Name", st.session_state.employee)
+    st.session_state.employee = st.text_input(
+        "Employee Name",
+        st.session_state.employee
+    )
 
+    # =========================
+    # SCANNER
+    # =========================
     st.subheader("📷 QR Scanner")
 
-    qr_value = qr_scanner()
+    qr_scanner()
+    qr_bridge()
 
-    # 🔥 FIX: recibir valor correctamente
+    # =========================
+    # READ QR VALUE
+    # =========================
+    qr_value = st.text_input("QR Input (auto)", key="qr_input")
+
     if qr_value:
         st.session_state.qr = qr_value
 
@@ -187,6 +214,9 @@ elif st.session_state.mode == "checkout":
 
         st.session_state.qr = ""
 
+    # =========================
+    # CART
+    # =========================
     st.subheader("📦 Current Session")
     st.write(st.session_state.cart)
 
@@ -219,7 +249,7 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    st.info("Escaneo disponible en siguiente versión (ya tienes base lista)")
+    st.info("Checkin listo en siguiente mejora")
 
     if st.button("Done"):
         reset_session()
