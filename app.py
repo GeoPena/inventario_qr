@@ -39,7 +39,8 @@ defaults = {
     "mode": "home",
     "employee": "",
     "cart": [],
-    "last_scanned": ""
+    "last_scanned": "",
+    "checkin_notes": ""   # 👈 NUEVO
 }
 
 for k, v in defaults.items():
@@ -55,6 +56,7 @@ def reset_session():
     st.session_state.employee = ""
     st.session_state.cart = []
     st.session_state.last_scanned = ""
+    st.session_state.checkin_notes = ""
 
 
 def find_row(asset_id):
@@ -103,7 +105,7 @@ def process_scan(qr_value):
     row_index, row = find_row(qr_value)
 
     # =========================
-    # CHECKOUT LOGIC
+    # CHECKOUT
     # =========================
     if st.session_state.mode == "checkout":
 
@@ -117,7 +119,6 @@ def process_scan(qr_value):
 
         item_name = row.get("Name", "Unknown")
 
-        # evitar duplicados
         for c in st.session_state.cart:
             if c["id"] == qr_value:
                 return
@@ -130,7 +131,7 @@ def process_scan(qr_value):
         st.success(f"✅ Added {qr_value} — {item_name}")
 
     # =========================
-    # CHECKIN LOGIC
+    # CHECKIN
     # =========================
     elif st.session_state.mode == "checkin":
 
@@ -138,12 +139,22 @@ def process_scan(qr_value):
             st.error(f"{qr_value} not found")
             return
 
+        notes = st.session_state.checkin_notes
+
         inventory_sheet.update_cell(row_index, 9, "Available")
         inventory_sheet.update_cell(row_index, 11, "")
 
-        add_history("Checkin", qr_value)
+        add_history(
+            "Checkin",
+            qr_value,
+            "",
+            notes   # 👈 AQUÍ VA LA NOTA
+        )
 
         st.success(f"✅ Checked in {qr_value}")
+
+        # limpiar nota después de usarla
+        st.session_state.checkin_notes = ""
 
 
 # =========================
@@ -181,9 +192,6 @@ elif st.session_state.mode == "checkout":
 
     process_scan(qr_value)
 
-    # =========================
-    # CART UI
-    # =========================
     st.subheader("📦 Current Session")
 
     if len(st.session_state.cart) == 0:
@@ -201,9 +209,6 @@ elif st.session_state.mode == "checkout":
                 remove_from_cart(item["id"])
                 st.rerun()
 
-    # =========================
-    # PROCESS CHECKOUT
-    # =========================
     if st.button("Process Checkout"):
 
         if not st.session_state.employee:
@@ -242,6 +247,13 @@ elif st.session_state.mode == "checkout":
 elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
+
+    # 👇 NUEVO INPUT DE NOTAS
+    st.text_input(
+        "Notes (optional)",
+        key="checkin_notes",
+        placeholder="Write any issue or comment..."
+    )
 
     st.subheader("📷 Scan Asset")
 
