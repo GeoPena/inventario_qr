@@ -1,23 +1,30 @@
 import streamlit as st
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # =========================
-# GOOGLE SHEETS
+# GOOGLE SHEETS AUTH (FIXED)
 # =========================
 scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
+# 🔥 FIX IMPORTANTE: parse seguro del secret
+service_account_info = json.loads(st.secrets["gcp_service_account"])
+
 creds = Credentials.from_service_account_info(
-    dict(st.secrets["gcp_service_account"]),
+    service_account_info,
     scopes=scope
 )
 
 client = gspread.authorize(creds)
 
+# =========================
+# SHEETS
+# =========================
 inventory_sheet = client.open_by_url(
     "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 ).worksheet("Inventory")
@@ -92,15 +99,10 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    employee = st.text_input(
-        "Employee Name",
-        value=st.session_state.employee
-    )
-
+    employee = st.text_input("Employee Name", value=st.session_state.employee)
     st.session_state.employee = employee
 
     def add_asset():
-
         asset = st.session_state.asset_input.strip()
 
         if not asset:
@@ -112,10 +114,8 @@ elif st.session_state.mode == "checkout":
             st.session_state.last_message = f"❌ {asset} not found"
             return
 
-        status = item["Status"]
-
-        if status != "Available":
-            st.session_state.last_message = f"⚠ {asset} is {status}"
+        if item["Status"] != "Available":
+            st.session_state.last_message = f"⚠ {asset} is {item['Status']}"
             return
 
         if asset not in st.session_state.cart:
@@ -150,15 +150,10 @@ elif st.session_state.mode == "checkout":
             row_index, item = find_row(asset)
 
             if row_index:
-
                 inventory_sheet.update_cell(row_index, 9, "Checked Out")
                 inventory_sheet.update_cell(row_index, 11, st.session_state.employee)
 
-                add_history(
-                    "Checkout",
-                    asset,
-                    st.session_state.employee
-                )
+                add_history("Checkout", asset, st.session_state.employee)
 
         st.success("✅ Checkout completed")
 
@@ -191,12 +186,7 @@ elif st.session_state.mode == "checkin":
         inventory_sheet.update_cell(row_index, 9, "Available")
         inventory_sheet.update_cell(row_index, 11, "")
 
-        add_history(
-            "Checkin",
-            asset,
-            "",
-            notes
-        )
+        add_history("Checkin", asset, "", notes)
 
         st.session_state.last_message = f"✅ Checked in {asset}"
         st.session_state.checkin_asset = ""
