@@ -1,4 +1,10 @@
 streamlit
-pandas
 gspread
-oauth2client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+opencv-python-headless
+numpy
+pyzbar
+streamlit-webrtc
+av
