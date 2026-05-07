@@ -138,10 +138,34 @@ def qr_scanner():
 
                 if (qrInput) {
 
+                    // colocar valor
                     qrInput.value = decodedText;
 
+                    // disparar eventos reales
                     qrInput.dispatchEvent(
                         new Event("input", { bubbles: true })
+                    );
+
+                    qrInput.dispatchEvent(
+                        new Event("change", { bubbles: true })
+                    );
+
+                    qrInput.dispatchEvent(
+                        new KeyboardEvent("keydown", {
+                            bubbles: true,
+                            cancelable: true,
+                            key: "Enter",
+                            code: "Enter"
+                        })
+                    );
+
+                    qrInput.dispatchEvent(
+                        new KeyboardEvent("keyup", {
+                            bubbles: true,
+                            cancelable: true,
+                            key: "Enter",
+                            code: "Enter"
+                        })
                     );
 
                 }
