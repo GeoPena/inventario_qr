@@ -13,9 +13,10 @@ scope = [
 ]
 
 # 🔥 FIX IMPORTANTE: parse seguro del secret
+service_account_info = json.loads(st.secrets["gcp_service_account"])
 
 creds = Credentials.from_service_account_info(
-    dict(st.secrets["gcp_service_account"]),
+    json.loads(st.secrets["GOOGLE_CREDENTIALS"]),
     scopes=scope
 )
 
