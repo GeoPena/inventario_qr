@@ -79,6 +79,7 @@ def qr_scanner():
     <div id="reader" style="width:100%;"></div>
 
     <script>
+
     function onScanSuccess(decodedText) {
         window.parent.postMessage({
             type: "streamlit:setComponentValue",
@@ -86,15 +87,19 @@ def qr_scanner():
         }, "*");
     }
 
-    let html5QrcodeScanner = new Html5QrcodeScanner(
+    const html5QrcodeScanner = new Html5QrcodeScanner(
         "reader",
-        { fps: 10, qrbox: 250 }
+        {
+            fps: 10,
+            qrbox: 250,
+            facingMode: { exact: "environment" }  // 🔥 cámara trasera
+        }
     );
 
     html5QrcodeScanner.render(onScanSuccess);
+
     </script>
     """
-
     return components.html(scanner_html, height=400)
 
 # =========================
