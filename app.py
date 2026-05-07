@@ -92,7 +92,7 @@ def qr_scanner():
         {
             fps: 10,
             qrbox: 250,
-            facingMode: { exact: "environment" }  // 🔥 cámara trasera
+            facingMode: "environment"  // 🔥 cámara trasera
         }
     );
 
