@@ -2,7 +2,15 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-import streamlit.components.v1 as components
+from streamlit_qrcode_scanner import qrcode_scanner
+
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="Asset Management",
+    layout="centered"
+)
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -19,12 +27,14 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
+
 inventory_sheet = client.open_by_url(
-    "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
+    SPREADSHEET_URL
 ).worksheet("Inventory")
 
 history_sheet = client.open_by_url(
-    "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
+    SPREADSHEET_URL
 ).worksheet("History")
 
 # =========================
@@ -34,11 +44,11 @@ defaults = {
     "mode": "home",
     "employee": "",
     "cart": [],
-    "qr_input": "",
     "last_scanned": ""
 }
 
 for key, value in defaults.items():
+
     if key not in st.session_state:
         st.session_state[key] = value
 
@@ -59,6 +69,7 @@ def find_row(asset_id):
     for i, row in enumerate(data, start=2):
 
         if str(row["AssetID"]).strip() == str(asset_id).strip():
+
             return i, row
 
     return None, None
@@ -74,117 +85,6 @@ def add_history(action, asset_id, employee="", notes=""):
     ])
 
 # =========================
-# QR SCANNER
-# =========================
-def qr_scanner():
-
-    scanner_html = """
-    <script src="https://unpkg.com/html5-qrcode"></script>
-
-    <div id="reader" style="width:100%;"></div>
-
-    <button id="start-btn"
-        style="
-            padding:12px;
-            border-radius:10px;
-            border:none;
-            background:#ff4b4b;
-            color:white;
-            font-size:16px;
-            width:100%;
-            margin-top:10px;
-        ">
-        Start Scanner
-    </button>
-
-    <script>
-
-    let scanner;
-
-    async function startScanner() {
-
-        scanner = new Html5Qrcode("reader");
-
-        const devices = await Html5Qrcode.getCameras();
-
-        let cameraId = devices[0].id;
-
-        devices.forEach(device => {
-
-            const label = device.label.toLowerCase();
-
-            if (
-                label.includes("back") ||
-                label.includes("rear") ||
-                label.includes("environment")
-            ) {
-                cameraId = device.id;
-            }
-
-        });
-
-        scanner.start(
-            cameraId,
-            {
-                fps: 10,
-                qrbox: 250
-            },
-            (decodedText) => {
-
-                const qrInput =
-                    window.parent.document.querySelector(
-                        'input[aria-label="QR_HIDDEN_INPUT"]'
-                    );
-
-                if (qrInput) {
-
-                    // colocar valor
-                    qrInput.value = decodedText;
-
-                    // disparar eventos reales
-                    qrInput.dispatchEvent(
-                        new Event("input", { bubbles: true })
-                    );
-
-                    qrInput.dispatchEvent(
-                        new Event("change", { bubbles: true })
-                    );
-
-                    qrInput.dispatchEvent(
-                        new KeyboardEvent("keydown", {
-                            bubbles: true,
-                            cancelable: true,
-                            key: "Enter",
-                            code: "Enter"
-                        })
-                    );
-
-                    qrInput.dispatchEvent(
-                        new KeyboardEvent("keyup", {
-                            bubbles: true,
-                            cancelable: true,
-                            key: "Enter",
-                            code: "Enter"
-                        })
-                    );
-
-                }
-
-            }
-        );
-
-    }
-
-    document
-        .getElementById("start-btn")
-        .addEventListener("click", startScanner);
-
-    </script>
-    """
-
-    components.html(scanner_html, height=500)
-
-# =========================
 # HOME
 # =========================
 if st.session_state.mode == "home":
@@ -194,12 +94,16 @@ if st.session_state.mode == "home":
     col1, col2 = st.columns(2)
 
     with col1:
+
         if st.button("📤 CHECKOUT"):
+
             st.session_state.mode = "checkout"
             st.rerun()
 
     with col2:
+
         if st.button("📥 CHECKIN"):
+
             st.session_state.mode = "checkin"
             st.rerun()
 
@@ -215,22 +119,13 @@ elif st.session_state.mode == "checkout":
         key="employee"
     )
 
-    # hidden input
-    qr_value = st.text_input(
-        "QR_HIDDEN_INPUT",
-        key="qr_input",
-        label_visibility="collapsed"
-    )
+    st.subheader("📷 Scan Asset")
 
-    st.subheader("📷 QR Scanner")
-
-    qr_scanner()
+    qr_value = qrcode_scanner()
 
     # =========================
-    # PROCESS QR
+    # PROCESS SCAN
     # =========================
-    qr_value = qr_value.strip()
-
     if (
         qr_value and
         qr_value != st.session_state.last_scanned
@@ -305,7 +200,6 @@ elif st.session_state.mode == "checkout":
         st.success("✅ Checkout completed")
 
         st.session_state.cart = []
-        st.session_state.qr_input = ""
         st.session_state.last_scanned = ""
 
     if st.button("Done"):
@@ -320,17 +214,9 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    qr_value = st.text_input(
-        "QR_HIDDEN_INPUT",
-        key="qr_input",
-        label_visibility="collapsed"
-    )
+    st.subheader("📷 Scan Asset")
 
-    st.subheader("📷 QR Scanner")
-
-    qr_scanner()
-
-    qr_value = qr_value.strip()
+    qr_value = qrcode_scanner()
 
     if (
         qr_value and
