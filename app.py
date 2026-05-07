@@ -154,14 +154,30 @@ elif st.session_state.mode == "checkout":
         st.session_state.employee
     )
 
-    st.subheader("📷 QR Scanner")
+    st.subheader("📷 Scan QR Code (Camera)")
 
-    qr_value = qr_scanner()
+    qr_img = st.camera_input("Scan Asset QR")
 
-    # ✅ FIX: correcto binding seguro
-    if qr_value:
-        st.session_state.qr = qr_value
+    if qr_img:
 
+        import cv2
+        import numpy as np
+        from pyzbar.pyzbar import decode
+        from PIL import Image
+
+        img = Image.open(qr_img)
+        img = np.array(img)
+
+        decoded = decode(img)
+
+        if decoded:
+            code = decoded[0].data.decode("utf-8")
+
+            st.session_state.qr = code
+
+    # =========================
+    # PROCESS QR
+    # =========================
     if st.session_state.qr:
 
         code = st.session_state.qr
@@ -201,19 +217,6 @@ elif st.session_state.mode == "checkout":
                 add_history("Checkout", asset, st.session_state.employee)
 
         st.success("✅ Checkout completed")
-
-    if st.button("Done"):
-        reset_session()
-        st.rerun()
-
-# =========================
-# CHECKIN MODE
-# =========================
-elif st.session_state.mode == "checkin":
-
-    st.title("📥 Checkin Mode")
-
-    st.info("Checkin listo en siguiente mejora")
 
     if st.button("Done"):
         reset_session()
