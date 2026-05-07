@@ -188,44 +188,46 @@ elif st.session_state.mode == "checkout":
     )
 
     # INPUT OCULTO PARA RECIBIR QR
-    qr_code = st.text_input(
-        "QR_HIDDEN_INPUT",
-        key="qr_input",
-        label_visibility="collapsed"
-    )
+st.text_input(
+    "QR_HIDDEN_INPUT",
+    key="qr_input",
+    label_visibility="collapsed"
+)
 
-    st.subheader("📷 QR Scanner")
+st.subheader("📷 QR Scanner")
 
-    qr_scanner()
+qr_scanner()
 
-    # =========================
-    # PROCESS QR
-    # =========================
-    if qr_code:
+# =========================
+# PROCESS QR
+# =========================
+if st.session_state.qr_input:
 
-        code = qr_code.strip()
+    code = st.session_state.qr_input.strip()
 
-        row_index, item = find_row(code)
+    row_index, item = find_row(code)
 
-        if not item:
+    if not item:
 
-            st.error(f"{code} not found")
+        st.error(f"{code} not found")
 
-        elif item["Status"] != "Available":
+    elif item["Status"] != "Available":
 
-            st.warning(f"{code} is {item['Status']}")
+        st.warning(f"{code} is {item['Status']}")
 
-        else:
+    else:
 
-            if code not in st.session_state.cart:
+        if code not in st.session_state.cart:
 
-                st.session_state.cart.append(code)
+            st.session_state.cart.append(code)
 
-                st.success(f"✅ Added {code}")
+            st.success(f"✅ Added {code}")
 
-        # limpiar scanner
-        st.session_state.qr_input = ""
+    # limpiar scanner
+    st.session_state.qr_input = ""
 
+    st.rerun()
+    
     # =========================
     # CART
     # =========================
