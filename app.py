@@ -5,14 +5,6 @@ from datetime import datetime
 import streamlit.components.v1 as components
 
 # =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(
-    page_title="Asset Management",
-    layout="centered"
-)
-
-# =========================
 # GOOGLE SHEETS AUTH
 # =========================
 scope = [
@@ -27,14 +19,12 @@ creds = Credentials.from_service_account_info(
 
 client = gspread.authorize(creds)
 
-spreadsheet_url = "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
-
 inventory_sheet = client.open_by_url(
-    spreadsheet_url
+    "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 ).worksheet("Inventory")
 
 history_sheet = client.open_by_url(
-    spreadsheet_url
+    "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 ).worksheet("History")
 
 # =========================
@@ -49,7 +39,6 @@ defaults = {
 }
 
 for key, value in defaults.items():
-
     if key not in st.session_state:
         st.session_state[key] = value
 
@@ -61,7 +50,6 @@ def reset_session():
     st.session_state.mode = "home"
     st.session_state.employee = ""
     st.session_state.cart = []
-    st.session_state.qr_input = ""
     st.session_state.last_scanned = ""
 
 def find_row(asset_id):
@@ -84,67 +72,6 @@ def add_history(action, asset_id, employee="", notes=""):
         employee,
         notes
     ])
-
-# =========================
-# PROCESS SCAN
-# =========================
-def process_scan():
-
-    qr_value = st.session_state.qr_input.strip()
-
-    if not qr_value:
-        return
-
-    if qr_value == st.session_state.last_scanned:
-        return
-
-    st.session_state.last_scanned = qr_value
-
-    row_index, item = find_row(qr_value)
-
-    if st.session_state.mode == "checkout":
-
-        if not item:
-
-            st.error(f"{qr_value} not found")
-            return
-
-        if item["Status"] != "Available":
-
-            st.warning(f"{qr_value} is {item['Status']}")
-            return
-
-        if qr_value not in st.session_state.cart:
-
-            st.session_state.cart.append(qr_value)
-
-            st.success(f"✅ Added {qr_value}")
-
-    elif st.session_state.mode == "checkin":
-
-        if not item:
-
-            st.error(f"{qr_value} not found")
-            return
-
-        inventory_sheet.update_cell(
-            row_index,
-            9,
-            "Available"
-        )
-
-        inventory_sheet.update_cell(
-            row_index,
-            11,
-            ""
-        )
-
-        add_history(
-            "Checkin",
-            qr_value
-        )
-
-        st.success(f"✅ Checked in {qr_value}")
 
 # =========================
 # QR SCANNER
@@ -211,25 +138,35 @@ def qr_scanner():
 
                 if (qrInput) {
 
+                    // colocar valor
                     qrInput.value = decodedText;
 
+                    // disparar eventos reales
                     qrInput.dispatchEvent(
                         new Event("input", { bubbles: true })
                     );
 
-                    // CLICK AUTOMÁTICO EN BOTÓN STREAMLIT
-                    const buttons =
-                        window.parent.document.querySelectorAll("button");
+                    qrInput.dispatchEvent(
+                        new Event("change", { bubbles: true })
+                    );
 
-                    buttons.forEach(btn => {
+                    qrInput.dispatchEvent(
+                        new KeyboardEvent("keydown", {
+                            bubbles: true,
+                            cancelable: true,
+                            key: "Enter",
+                            code: "Enter"
+                        })
+                    );
 
-                        if (btn.innerText === "SCAN_TRIGGER") {
-
-                            btn.click();
-
-                        }
-
-                    });
+                    qrInput.dispatchEvent(
+                        new KeyboardEvent("keyup", {
+                            bubbles: true,
+                            cancelable: true,
+                            key: "Enter",
+                            code: "Enter"
+                        })
+                    );
 
                 }
 
@@ -257,16 +194,12 @@ if st.session_state.mode == "home":
     col1, col2 = st.columns(2)
 
     with col1:
-
         if st.button("📤 CHECKOUT"):
-
             st.session_state.mode = "checkout"
             st.rerun()
 
     with col2:
-
         if st.button("📥 CHECKIN"):
-
             st.session_state.mode = "checkin"
             st.rerun()
 
@@ -282,20 +215,46 @@ elif st.session_state.mode == "checkout":
         key="employee"
     )
 
-    st.text_input(
+    # hidden input
+    qr_value = st.text_input(
         "QR_HIDDEN_INPUT",
         key="qr_input",
         label_visibility="collapsed"
     )
 
-    # BOTÓN INVISIBLE
-    if st.button("SCAN_TRIGGER"):
-
-        process_scan()
-
     st.subheader("📷 QR Scanner")
 
     qr_scanner()
+
+    # =========================
+    # PROCESS QR
+    # =========================
+    qr_value = qr_value.strip()
+
+    if (
+        qr_value and
+        qr_value != st.session_state.last_scanned
+    ):
+
+        st.session_state.last_scanned = qr_value
+
+        row_index, item = find_row(qr_value)
+
+        if not item:
+
+            st.error(f"{qr_value} not found")
+
+        elif item["Status"] != "Available":
+
+            st.warning(f"{qr_value} is {item['Status']}")
+
+        else:
+
+            if qr_value not in st.session_state.cart:
+
+                st.session_state.cart.append(qr_value)
+
+                st.success(f"✅ Added {qr_value}")
 
     # =========================
     # CURRENT SESSION
@@ -361,20 +320,51 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    st.text_input(
+    qr_value = st.text_input(
         "QR_HIDDEN_INPUT",
         key="qr_input",
         label_visibility="collapsed"
     )
 
-    # BOTÓN INVISIBLE
-    if st.button("SCAN_TRIGGER"):
-
-        process_scan()
-
     st.subheader("📷 QR Scanner")
 
     qr_scanner()
+
+    qr_value = qr_value.strip()
+
+    if (
+        qr_value and
+        qr_value != st.session_state.last_scanned
+    ):
+
+        st.session_state.last_scanned = qr_value
+
+        row_index, item = find_row(qr_value)
+
+        if not item:
+
+            st.error(f"{qr_value} not found")
+
+        else:
+
+            inventory_sheet.update_cell(
+                row_index,
+                9,
+                "Available"
+            )
+
+            inventory_sheet.update_cell(
+                row_index,
+                11,
+                ""
+            )
+
+            add_history(
+                "Checkin",
+                qr_value
+            )
+
+            st.success(f"✅ Checked in {qr_value}")
 
     if st.button("Done"):
 
