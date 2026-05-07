@@ -29,13 +29,8 @@ client = gspread.authorize(creds)
 
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 
-inventory_sheet = client.open_by_url(
-    SPREADSHEET_URL
-).worksheet("Inventory")
-
-history_sheet = client.open_by_url(
-    SPREADSHEET_URL
-).worksheet("History")
+inventory_sheet = client.open_by_url(SPREADSHEET_URL).worksheet("Inventory")
+history_sheet = client.open_by_url(SPREADSHEET_URL).worksheet("History")
 
 # =========================
 # SESSION STATE
@@ -47,20 +42,27 @@ defaults = {
     "last_scanned": ""
 }
 
-for key, value in defaults.items():
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-    if key not in st.session_state:
-        st.session_state[key] = value
 
 # =========================
 # HELPERS
 # =========================
 def reset_session():
 
-    st.session_state.mode = "home"
-    st.session_state.employee = ""
-    st.session_state.cart = []
-    st.session_state.last_scanned = ""
+    defaults = {
+        "mode": "home",
+        "employee": "",
+        "cart": [],
+        "last_scanned": ""
+    }
+
+    for k, v in defaults.items():
+        if k in st.session_state:
+            st.session_state[k] = v
+
 
 def find_row(asset_id):
 
@@ -69,10 +71,10 @@ def find_row(asset_id):
     for i, row in enumerate(data, start=2):
 
         if str(row["AssetID"]).strip() == str(asset_id).strip():
-
             return i, row
 
     return None, None
+
 
 def add_history(action, asset_id, employee="", notes=""):
 
@@ -84,6 +86,56 @@ def add_history(action, asset_id, employee="", notes=""):
         notes
     ])
 
+
+def process_scan(qr_value):
+
+    if not qr_value:
+        return
+
+    if qr_value == st.session_state.last_scanned:
+        return
+
+    st.session_state.last_scanned = qr_value
+
+    row_index, row = find_row(qr_value)
+
+    if st.session_state.mode == "checkout":
+
+        if not row:
+            st.error(f"{qr_value} not found")
+            return
+
+        if row["Status"] != "Available":
+            st.warning(f"{qr_value} is {row['Status']}")
+            return
+
+        item_name = row.get("Name", "Unknown")
+
+        for c in st.session_state.cart:
+            if c["id"] == qr_value:
+                return
+
+        st.session_state.cart.append({
+            "id": qr_value,
+            "name": item_name
+        })
+
+        st.success(f"✅ Added {qr_value} — {item_name}")
+
+    elif st.session_state.mode == "checkin":
+
+        if not row:
+            st.error(f"{qr_value} not found")
+            return
+
+        inventory_sheet.update_cell(row_index, 9, "Available")
+        inventory_sheet.update_cell(row_index, 11, "")
+
+        add_history("Checkin", qr_value)
+
+        st.success(f"✅ Checked in {qr_value}")
+
+
 # =========================
 # HOME
 # =========================
@@ -94,18 +146,15 @@ if st.session_state.mode == "home":
     col1, col2 = st.columns(2)
 
     with col1:
-
         if st.button("📤 CHECKOUT"):
-
             st.session_state.mode = "checkout"
             st.rerun()
 
     with col2:
-
         if st.button("📥 CHECKIN"):
-
             st.session_state.mode = "checkin"
             st.rerun()
+
 
 # =========================
 # CHECKOUT
@@ -114,47 +163,16 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    st.text_input(
-        "Employee Name",
-        key="employee"
-    )
+    st.text_input("Employee Name", key="employee")
 
     st.subheader("📷 Scan Asset")
 
     qr_value = qrcode_scanner()
 
-    # =========================
-    # PROCESS SCAN
-    # =========================
-    if (
-        qr_value and
-        qr_value != st.session_state.last_scanned
-    ):
-
-        st.session_state.last_scanned = qr_value
-
-        row_index, item = find_row(qr_value)
-
-        if not item:
-
-            st.error(f"{qr_value} not found")
-
-        elif item["Status"] != "Available":
-
-            st.warning(f"{qr_value} is {item['Status']}")
-
-        else:
-
-            if qr_value not in st.session_state.cart:
-                item_name = item["Name"] if item and "Name" in item else "Unknown"
-                st.session_state.cart.append({
-                    "id": qr_value,
-                    "name": item_name
-                })
-                st.success(f"✅ Added {qr_value} — {item_name}")
+    process_scan(qr_value)
 
     # =========================
-    # CURRENT SESSION
+    # CART UI
     # =========================
     st.subheader("📦 Current Session")
 
@@ -162,44 +180,29 @@ elif st.session_state.mode == "checkout":
         st.write(f"🔹 {item['id']} — {item['name']}")
 
     # =========================
-    # PROCESS CHECKOUT
+    # CHECKOUT ACTION
     # =========================
     if st.button("Process Checkout"):
 
         if not st.session_state.employee:
-
             st.error("Employee required")
             st.stop()
 
         if len(st.session_state.cart) == 0:
-
             st.error("No assets scanned")
             st.stop()
 
         for item in st.session_state.cart:
-            asset = item["id"]
 
-            row_index, item = find_row(asset)
+            asset = item["id"]
+            row_index, row = find_row(asset)
 
             if row_index:
 
-                inventory_sheet.update_cell(
-                    row_index,
-                    9,
-                    "Checked Out"
-                )
+                inventory_sheet.update_cell(row_index, 9, "Checked Out")
+                inventory_sheet.update_cell(row_index, 11, st.session_state.employee)
 
-                inventory_sheet.update_cell(
-                    row_index,
-                    11,
-                    st.session_state.employee
-                )
-
-                add_history(
-                    "Checkout",
-                    asset,
-                    st.session_state.employee
-                )
+                add_history("Checkout", asset, st.session_state.employee)
 
         st.success("✅ Checkout completed")
 
@@ -207,9 +210,9 @@ elif st.session_state.mode == "checkout":
         st.session_state.last_scanned = ""
 
     if st.button("Done"):
-
         reset_session()
         st.rerun()
+
 
 # =========================
 # CHECKIN
@@ -222,41 +225,8 @@ elif st.session_state.mode == "checkin":
 
     qr_value = qrcode_scanner()
 
-    if (
-        qr_value and
-        qr_value != st.session_state.last_scanned
-    ):
-
-        st.session_state.last_scanned = qr_value
-
-        row_index, item = find_row(qr_value)
-
-        if not item:
-
-            st.error(f"{qr_value} not found")
-
-        else:
-
-            inventory_sheet.update_cell(
-                row_index,
-                9,
-                "Available"
-            )
-
-            inventory_sheet.update_cell(
-                row_index,
-                11,
-                ""
-            )
-
-            add_history(
-                "Checkin",
-                qr_value
-            )
-
-            st.success(f"✅ Checked in {qr_value}")
+    process_scan(qr_value)
 
     if st.button("Done"):
-
         reset_session()
         st.rerun()
