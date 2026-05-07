@@ -30,26 +30,27 @@ history_sheet = client.open_by_url(
 # =========================
 # SESSION STATE
 # =========================
-if "mode" not in st.session_state:
-    st.session_state.mode = "home"
+defaults = {
+    "mode": "home",
+    "employee": "",
+    "cart": [],
+    "qr_input": "",
+    "last_scanned": ""
+}
 
-if "employee" not in st.session_state:
-    st.session_state.employee = ""
-
-if "cart" not in st.session_state:
-    st.session_state.cart = []
-
-if "qr_input" not in st.session_state:
-    st.session_state.qr_input = ""
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 # =========================
 # HELPERS
 # =========================
 def reset_session():
+
+    st.session_state.mode = "home"
     st.session_state.employee = ""
     st.session_state.cart = []
-    st.session_state.qr_input = ""
-    st.session_state.mode = "home"
+    st.session_state.last_scanned = ""
 
 def find_row(asset_id):
 
@@ -62,13 +63,14 @@ def find_row(asset_id):
 
     return None, None
 
-def add_history(action, asset_id, employee=""):
+def add_history(action, asset_id, employee="", notes=""):
 
     history_sheet.append_row([
         str(datetime.now()),
         action,
         asset_id,
-        employee
+        employee,
+        notes
     ])
 
 # =========================
@@ -129,7 +131,6 @@ def qr_scanner():
             },
             (decodedText) => {
 
-                // INPUT ESCONDIDO
                 const qrInput =
                     window.parent.document.querySelector(
                         'input[aria-label="QR_HIDDEN_INPUT"]'
@@ -142,6 +143,7 @@ def qr_scanner():
                     qrInput.dispatchEvent(
                         new Event("input", { bubbles: true })
                     );
+
                 }
 
             }
@@ -170,10 +172,12 @@ if st.session_state.mode == "home":
     with col1:
         if st.button("📤 CHECKOUT"):
             st.session_state.mode = "checkout"
+            st.rerun()
 
     with col2:
         if st.button("📥 CHECKIN"):
             st.session_state.mode = "checkin"
+            st.rerun()
 
 # =========================
 # CHECKOUT
@@ -182,54 +186,54 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    st.session_state.employee = st.text_input(
+    st.text_input(
         "Employee Name",
-        st.session_state.employee
+        key="employee"
     )
 
-    # INPUT OCULTO PARA RECIBIR QR
-st.text_input(
-    "QR_HIDDEN_INPUT",
-    key="qr_input",
-    label_visibility="collapsed"
-)
+    # hidden input
+    st.text_input(
+        "QR_HIDDEN_INPUT",
+        key="qr_input",
+        label_visibility="collapsed"
+    )
 
-st.subheader("📷 QR Scanner")
+    st.subheader("📷 QR Scanner")
 
-qr_scanner()
+    qr_scanner()
 
-# =========================
-# PROCESS QR
-# =========================
-if st.session_state.qr_input:
-
-    code = st.session_state.qr_input.strip()
-
-    row_index, item = find_row(code)
-
-    if not item:
-
-        st.error(f"{code} not found")
-
-    elif item["Status"] != "Available":
-
-        st.warning(f"{code} is {item['Status']}")
-
-    else:
-
-        if code not in st.session_state.cart:
-
-            st.session_state.cart.append(code)
-
-            st.success(f"✅ Added {code}")
-
-    # limpiar scanner
-    st.session_state.qr_input = ""
-
-    st.rerun()
-    
     # =========================
-    # CART
+    # PROCESS QR
+    # =========================
+    qr_value = st.session_state.qr_input.strip()
+
+    if (
+        qr_value and
+        qr_value != st.session_state.last_scanned
+    ):
+
+        st.session_state.last_scanned = qr_value
+
+        row_index, item = find_row(qr_value)
+
+        if not item:
+
+            st.error(f"{qr_value} not found")
+
+        elif item["Status"] != "Available":
+
+            st.warning(f"{qr_value} is {item['Status']}")
+
+        else:
+
+            if qr_value not in st.session_state.cart:
+
+                st.session_state.cart.append(qr_value)
+
+                st.success(f"✅ Added {qr_value}")
+
+    # =========================
+    # CURRENT SESSION
     # =========================
     st.subheader("📦 Current Session")
 
@@ -276,6 +280,10 @@ if st.session_state.qr_input:
 
         st.success("✅ Checkout completed")
 
+        st.session_state.cart = []
+        st.session_state.qr_input = ""
+        st.session_state.last_scanned = ""
+
     if st.button("Done"):
 
         reset_session()
@@ -288,7 +296,51 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    st.info("Checkin scanner next version")
+    st.text_input(
+        "QR_HIDDEN_INPUT",
+        key="qr_input",
+        label_visibility="collapsed"
+    )
+
+    st.subheader("📷 QR Scanner")
+
+    qr_scanner()
+
+    qr_value = st.session_state.qr_input.strip()
+
+    if (
+        qr_value and
+        qr_value != st.session_state.last_scanned
+    ):
+
+        st.session_state.last_scanned = qr_value
+
+        row_index, item = find_row(qr_value)
+
+        if not item:
+
+            st.error(f"{qr_value} not found")
+
+        else:
+
+            inventory_sheet.update_cell(
+                row_index,
+                9,
+                "Available"
+            )
+
+            inventory_sheet.update_cell(
+                row_index,
+                11,
+                ""
+            )
+
+            add_history(
+                "Checkin",
+                qr_value
+            )
+
+            st.success(f"✅ Checked in {qr_value}")
 
     if st.button("Done"):
 
