@@ -1,19 +1,19 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # =========================
 # GOOGLE SHEETS
 # =========================
 scope = [
-    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
+creds = Credentials.from_service_account_info(
     st.secrets["gcp_service_account"],
-    scope
+    scopes=scope
 )
 
 client = gspread.authorize(creds)
@@ -99,9 +99,6 @@ elif st.session_state.mode == "checkout":
 
     st.session_state.employee = employee
 
-    # -------------------------
-    # AUTO ADD FUNCTION
-    # -------------------------
     def add_asset():
 
         asset = st.session_state.asset_input.strip()
@@ -136,12 +133,8 @@ elif st.session_state.mode == "checkout":
     st.write(st.session_state.last_message)
 
     st.subheader("📦 Current Session")
-
     st.write(st.session_state.cart)
 
-    # -------------------------
-    # PROCESS CHECKOUT
-    # -------------------------
     if st.button("Process Checkout"):
 
         if not st.session_state.employee:
@@ -156,24 +149,19 @@ elif st.session_state.mode == "checkout":
 
             row_index, item = find_row(asset)
 
-            inventory_sheet.update_cell(row_index, 9, "Checked Out")
-            inventory_sheet.update_cell(
-                row_index,
-                11,
-                st.session_state.employee
-            )
+            if row_index:
 
-            add_history(
-                "Checkout",
-                asset,
-                st.session_state.employee
-            )
+                inventory_sheet.update_cell(row_index, 9, "Checked Out")
+                inventory_sheet.update_cell(row_index, 11, st.session_state.employee)
+
+                add_history(
+                    "Checkout",
+                    asset,
+                    st.session_state.employee
+                )
 
         st.success("✅ Checkout completed")
 
-    # -------------------------
-    # DONE
-    # -------------------------
     if st.button("Done"):
         reset_session()
         st.rerun()
@@ -185,13 +173,8 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    notes = st.text_input(
-        "Optional Notes"
-    )
+    notes = st.text_input("Optional Notes")
 
-    # -------------------------
-    # CHECKIN FUNCTION
-    # -------------------------
     def process_checkin():
 
         asset = st.session_state.checkin_asset.strip()
@@ -216,7 +199,6 @@ elif st.session_state.mode == "checkin":
         )
 
         st.session_state.last_message = f"✅ Checked in {asset}"
-
         st.session_state.checkin_asset = ""
 
     st.text_input(
@@ -227,9 +209,6 @@ elif st.session_state.mode == "checkin":
 
     st.write(st.session_state.last_message)
 
-    # -------------------------
-    # DONE
-    # -------------------------
     if st.button("Done"):
         reset_session()
         st.rerun()
