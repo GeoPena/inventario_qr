@@ -46,22 +46,15 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-
 # =========================
 # HELPERS
 # =========================
 def reset_session():
 
-    defaults = {
-        "mode": "home",
-        "employee": "",
-        "cart": [],
-        "last_scanned": ""
-    }
-
-    for k, v in defaults.items():
-        if k in st.session_state:
-            st.session_state[k] = v
+    st.session_state.mode = "home"
+    st.session_state.employee = ""
+    st.session_state.cart = []
+    st.session_state.last_scanned = ""
 
 
 def find_row(asset_id):
@@ -87,6 +80,16 @@ def add_history(action, asset_id, employee="", notes=""):
     ])
 
 
+def remove_from_cart(asset_id):
+
+    st.session_state.cart = [
+        item for item in st.session_state.cart
+        if item["id"] != asset_id
+    ]
+
+    st.session_state.last_scanned = ""
+
+
 def process_scan(qr_value):
 
     if not qr_value:
@@ -99,6 +102,9 @@ def process_scan(qr_value):
 
     row_index, row = find_row(qr_value)
 
+    # =========================
+    # CHECKOUT LOGIC
+    # =========================
     if st.session_state.mode == "checkout":
 
         if not row:
@@ -111,6 +117,7 @@ def process_scan(qr_value):
 
         item_name = row.get("Name", "Unknown")
 
+        # evitar duplicados
         for c in st.session_state.cart:
             if c["id"] == qr_value:
                 return
@@ -122,6 +129,9 @@ def process_scan(qr_value):
 
         st.success(f"✅ Added {qr_value} — {item_name}")
 
+    # =========================
+    # CHECKIN LOGIC
+    # =========================
     elif st.session_state.mode == "checkin":
 
         if not row:
@@ -176,11 +186,23 @@ elif st.session_state.mode == "checkout":
     # =========================
     st.subheader("📦 Current Session")
 
+    if len(st.session_state.cart) == 0:
+        st.info("No items scanned yet")
+
     for item in st.session_state.cart:
-        st.write(f"🔹 {item['id']} — {item['name']}")
+
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            st.write(f"🔹 {item['id']} — {item['name']}")
+
+        with col2:
+            if st.button("❌", key=f"remove_{item['id']}"):
+                remove_from_cart(item["id"])
+                st.rerun()
 
     # =========================
-    # CHECKOUT ACTION
+    # PROCESS CHECKOUT
     # =========================
     if st.button("Process Checkout"):
 
