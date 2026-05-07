@@ -1,9 +1,8 @@
-import streamlit.components.v1 as components
 import streamlit as st
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import streamlit.components.v1 as components
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -70,9 +69,10 @@ def add_history(action, asset_id, employee=""):
     ])
 
 # =========================
-# QR SCANNER (HTML5 PRO)
+# QR SCANNER (FIXED PRO VERSION)
 # =========================
 def qr_scanner():
+
     scanner_html = """
     <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -106,8 +106,12 @@ def qr_scanner():
                 },
                 (decodedText) => {
 
-                    // 🔥 GUARDA EN SESSION STORAGE
-                    sessionStorage.setItem("qr_code", decodedText);
+                    // ✅ ENVÍA DIRECTO A STREAMLIT STATE (NO DOM HACKING)
+                    window.parent.postMessage({
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: decodedText
+                    }, "*");
 
                 }
             );
@@ -119,36 +123,7 @@ def qr_scanner():
     </script>
     """
 
-    components.html(scanner_html, height=450)
-
-# =========================
-# BRIDGE (JS → STREAMLIT)
-# =========================
-def qr_bridge():
-
-    components.html("""
-    <script>
-
-    setInterval(() => {
-
-        const qr = sessionStorage.getItem("qr_code");
-
-        if (qr) {
-
-            const input = window.parent.document.querySelectorAll("input")[0];
-
-            if (input) {
-                input.value = qr;
-                input.dispatchEvent(new Event("input", { bubbles: true }));
-            }
-
-            sessionStorage.removeItem("qr_code");
-        }
-
-    }, 500);
-
-    </script>
-    """, height=0)
+    return components.html(scanner_html, height=450)
 
 # =========================
 # HOME
@@ -179,19 +154,11 @@ elif st.session_state.mode == "checkout":
         st.session_state.employee
     )
 
-    # =========================
-    # SCANNER
-    # =========================
     st.subheader("📷 QR Scanner")
 
-    qr_scanner()
-    qr_bridge()
+    qr_value = qr_scanner()
 
-    # =========================
-    # READ QR VALUE
-    # =========================
-    qr_value = st.text_input("QR Input (auto)", key="qr_input")
-
+    # ✅ FIX: correcto binding seguro
     if qr_value:
         st.session_state.qr = qr_value
 
@@ -214,9 +181,6 @@ elif st.session_state.mode == "checkout":
 
         st.session_state.qr = ""
 
-    # =========================
-    # CART
-    # =========================
     st.subheader("📦 Current Session")
     st.write(st.session_state.cart)
 
