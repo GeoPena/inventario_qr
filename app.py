@@ -40,7 +40,7 @@ defaults = {
     "employee": "",
     "cart": [],
     "last_scanned": "",
-    "checkin_notes": ""   # 👈 NUEVO
+    "checkin_notes": ""
 }
 
 for k, v in defaults.items():
@@ -92,17 +92,22 @@ def remove_from_cart(asset_id):
     st.session_state.last_scanned = ""
 
 
-def process_scan(qr_value):
+# =========================
+# PROCESS SCAN (QR + MANUAL)
+# =========================
+def process_scan(value):
 
-    if not qr_value:
+    if not value:
         return
 
-    if qr_value == st.session_state.last_scanned:
+    value = value.strip()
+
+    if value == st.session_state.last_scanned:
         return
 
-    st.session_state.last_scanned = qr_value
+    st.session_state.last_scanned = value
 
-    row_index, row = find_row(qr_value)
+    row_index, row = find_row(value)
 
     # =========================
     # CHECKOUT
@@ -110,25 +115,25 @@ def process_scan(qr_value):
     if st.session_state.mode == "checkout":
 
         if not row:
-            st.error(f"{qr_value} not found")
+            st.error(f"{value} not found")
             return
 
         if row["Status"] != "Available":
-            st.warning(f"{qr_value} is {row['Status']}")
+            st.warning(f"{value} is {row['Status']}")
             return
 
         item_name = row.get("Name", "Unknown")
 
         for c in st.session_state.cart:
-            if c["id"] == qr_value:
+            if c["id"] == value:
                 return
 
         st.session_state.cart.append({
-            "id": qr_value,
+            "id": value,
             "name": item_name
         })
 
-        st.success(f"✅ Added {qr_value} — {item_name}")
+        st.success(f"✅ Added {value} — {item_name}")
 
     # =========================
     # CHECKIN
@@ -136,7 +141,7 @@ def process_scan(qr_value):
     elif st.session_state.mode == "checkin":
 
         if not row:
-            st.error(f"{qr_value} not found")
+            st.error(f"{value} not found")
             return
 
         notes = st.session_state.checkin_notes
@@ -146,14 +151,13 @@ def process_scan(qr_value):
 
         add_history(
             "Checkin",
-            qr_value,
+            value,
             "",
-            notes   # 👈 AQUÍ VA LA NOTA
+            notes
         )
 
-        st.success(f"✅ Checked in {qr_value}")
+        st.success(f"✅ Checked in {value}")
 
-        # limpiar nota después de usarla
         st.session_state.checkin_notes = ""
 
 
@@ -190,8 +194,20 @@ elif st.session_state.mode == "checkout":
 
     qr_value = qrcode_scanner()
 
+    # QR input
     process_scan(qr_value)
 
+    # MANUAL INPUT (fallback)
+    manual_value = st.text_input("Or enter Asset ID manually")
+
+    if manual_value:
+        process_scan(manual_value)
+        st.session_state["manual_checkout"] = ""
+
+
+    # =========================
+    # CART UI
+    # =========================
     st.subheader("📦 Current Session")
 
     if len(st.session_state.cart) == 0:
@@ -209,6 +225,9 @@ elif st.session_state.mode == "checkout":
                 remove_from_cart(item["id"])
                 st.rerun()
 
+    # =========================
+    # PROCESS CHECKOUT
+    # =========================
     if st.button("Process Checkout"):
 
         if not st.session_state.employee:
@@ -248,7 +267,6 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    # 👇 NUEVO INPUT DE NOTAS
     st.text_input(
         "Notes (optional)",
         key="checkin_notes",
@@ -260,6 +278,14 @@ elif st.session_state.mode == "checkin":
     qr_value = qrcode_scanner()
 
     process_scan(qr_value)
+
+    # MANUAL INPUT (fallback)
+    manual_value = st.text_input("Or enter Asset ID manually")
+
+    if manual_value:
+        process_scan(manual_value)
+        st.session_state["manual_checkin"] = ""
+
 
     if st.button("Done"):
         reset_session()
