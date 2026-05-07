@@ -223,10 +223,8 @@ elif st.session_state.mode == "checkout":
 
                 st.success(f"✅ Added {code}")
 
-        # limpiar input
+        # limpiar scanner
         st.session_state.qr_input = ""
-
-        st.rerun()
 
     # =========================
     # CART
