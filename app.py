@@ -81,10 +81,14 @@ def qr_scanner():
     <script>
 
     function onScanSuccess(decodedText) {
-        window.parent.postMessage({
-            type: "streamlit:setComponentValue",
-            value: decodedText
-        }, "*");
+
+        // manda al input de Streamlit
+        const input = window.parent.document.querySelector('input[data-testid="stTextInput"]');
+
+        if (input) {
+            input.value = decodedText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     }
 
     const html5QrcodeScanner = new Html5QrcodeScanner(
@@ -92,7 +96,7 @@ def qr_scanner():
         {
             fps: 10,
             qrbox: 250,
-            facingMode: "environment"  // 🔥 cámara trasera
+            facingMode: "environment"
         }
     );
 
@@ -129,7 +133,7 @@ elif st.session_state.mode == "checkout":
     st.session_state.employee = st.text_input("Employee Name", st.session_state.employee)
 
     st.subheader("📷 Scan QR Code")
-    qr_value = qr_scanner()
+    qr_value = st.text_input("QR Result (auto)", key="qr_input")
 
     # recibir QR del scanner
     if qr_value:
