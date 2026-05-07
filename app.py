@@ -216,7 +216,7 @@ elif st.session_state.mode == "checkout":
     )
 
     # hidden input
-    st.text_input(
+    qr_value = st.text_input(
         "QR_HIDDEN_INPUT",
         key="qr_input",
         label_visibility="collapsed"
@@ -229,7 +229,7 @@ elif st.session_state.mode == "checkout":
     # =========================
     # PROCESS QR
     # =========================
-    qr_value = st.session_state.qr_input.strip()
+    qr_value = qr_value.strip()
 
     if (
         qr_value and
@@ -320,7 +320,7 @@ elif st.session_state.mode == "checkin":
 
     st.title("📥 Checkin Mode")
 
-    st.text_input(
+    qr_value = st.text_input(
         "QR_HIDDEN_INPUT",
         key="qr_input",
         label_visibility="collapsed"
@@ -330,7 +330,7 @@ elif st.session_state.mode == "checkin":
 
     qr_scanner()
 
-    qr_value = st.session_state.qr_input.strip()
+    qr_value = qr_value.strip()
 
     if (
         qr_value and
