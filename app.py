@@ -39,8 +39,8 @@ if "employee" not in st.session_state:
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
-if "qr" not in st.session_state:
-    st.session_state.qr = ""
+if "qr_input" not in st.session_state:
+    st.session_state.qr_input = ""
 
 # =========================
 # HELPERS
@@ -48,19 +48,22 @@ if "qr" not in st.session_state:
 def reset_session():
     st.session_state.employee = ""
     st.session_state.cart = []
-    st.session_state.qr = ""
+    st.session_state.qr_input = ""
     st.session_state.mode = "home"
 
 def find_row(asset_id):
+
     data = inventory_sheet.get_all_records()
 
     for i, row in enumerate(data, start=2):
+
         if str(row["AssetID"]).strip() == str(asset_id).strip():
             return i, row
 
     return None, None
 
 def add_history(action, asset_id, employee=""):
+
     history_sheet.append_row([
         str(datetime.now()),
         action,
@@ -69,7 +72,7 @@ def add_history(action, asset_id, employee=""):
     ])
 
 # =========================
-# QR SCANNER (FIXED PRO VERSION)
+# QR SCANNER
 # =========================
 def qr_scanner():
 
@@ -78,52 +81,82 @@ def qr_scanner():
 
     <div id="reader" style="width:100%;"></div>
 
-    <button id="startBtn">Start Scanner</button>
+    <button id="start-btn"
+        style="
+            padding:12px;
+            border-radius:10px;
+            border:none;
+            background:#ff4b4b;
+            color:white;
+            font-size:16px;
+            width:100%;
+            margin-top:10px;
+        ">
+        Start Scanner
+    </button>
 
     <script>
 
     let scanner;
 
-    document.getElementById("startBtn").onclick = function () {
+    async function startScanner() {
 
         scanner = new Html5Qrcode("reader");
 
-        Html5Qrcode.getCameras().then(devices => {
+        const devices = await Html5Qrcode.getCameras();
 
-            let cameraId = devices[0].id;
+        let cameraId = devices[0].id;
 
-            devices.forEach(d => {
-                if (d.label.toLowerCase().includes("back")) {
-                    cameraId = d.id;
-                }
-            });
+        devices.forEach(device => {
 
-            scanner.start(
-                cameraId,
-                {
-                    fps: 10,
-                    qrbox: 250
-                },
-                (decodedText) => {
+            const label = device.label.toLowerCase();
 
-                    // ✅ ENVÍA DIRECTO A STREAMLIT STATE (NO DOM HACKING)
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: "streamlit:setComponentValue",
-                        value: decodedText
-                    }, "*");
-
-                }
-            );
+            if (
+                label.includes("back") ||
+                label.includes("rear") ||
+                label.includes("environment")
+            ) {
+                cameraId = device.id;
+            }
 
         });
 
-    };
+        scanner.start(
+            cameraId,
+            {
+                fps: 10,
+                qrbox: 250
+            },
+            (decodedText) => {
+
+                // INPUT ESCONDIDO
+                const qrInput =
+                    window.parent.document.querySelector(
+                        'input[aria-label="QR_HIDDEN_INPUT"]'
+                    );
+
+                if (qrInput) {
+
+                    qrInput.value = decodedText;
+
+                    qrInput.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                }
+
+            }
+        );
+
+    }
+
+    document
+        .getElementById("start-btn")
+        .addEventListener("click", startScanner);
 
     </script>
     """
 
-    return components.html(scanner_html, height=450)
+    components.html(scanner_html, height=500)
 
 # =========================
 # HOME
@@ -143,7 +176,7 @@ if st.session_state.mode == "home":
             st.session_state.mode = "checkin"
 
 # =========================
-# CHECKOUT MODE
+# CHECKOUT
 # =========================
 elif st.session_state.mode == "checkout":
 
@@ -154,56 +187,67 @@ elif st.session_state.mode == "checkout":
         st.session_state.employee
     )
 
-    st.subheader("📷 Scan QR Code (Camera)")
+    # INPUT OCULTO PARA RECIBIR QR
+    qr_code = st.text_input(
+        "QR_HIDDEN_INPUT",
+        key="qr_input",
+        label_visibility="collapsed"
+    )
 
-    qr_img = st.camera_input("Scan Asset QR")
+    st.subheader("📷 QR Scanner")
 
-    if qr_img:
-
-        import cv2
-        import numpy as np
-        from pyzbar.pyzbar import decode
-        from PIL import Image
-
-        img = Image.open(qr_img)
-        img = np.array(img)
-
-        decoded = decode(img)
-
-        if decoded:
-            code = decoded[0].data.decode("utf-8")
-
-            st.session_state.qr = code
+    qr_scanner()
 
     # =========================
     # PROCESS QR
     # =========================
-    if st.session_state.qr:
+    if qr_code:
 
-        code = st.session_state.qr
+        code = qr_code.strip()
 
         row_index, item = find_row(code)
 
         if not item:
+
             st.error(f"{code} not found")
 
         elif item["Status"] != "Available":
+
             st.warning(f"{code} is {item['Status']}")
 
         else:
+
             if code not in st.session_state.cart:
+
                 st.session_state.cart.append(code)
-                st.success(f"Added {code}")
 
-        st.session_state.qr = ""
+                st.success(f"✅ Added {code}")
 
+        # limpiar input
+        st.session_state.qr_input = ""
+
+        st.rerun()
+
+    # =========================
+    # CART
+    # =========================
     st.subheader("📦 Current Session")
+
     st.write(st.session_state.cart)
 
+    # =========================
+    # PROCESS CHECKOUT
+    # =========================
     if st.button("Process Checkout"):
 
         if not st.session_state.employee:
+
             st.error("Employee required")
+            st.stop()
+
+        if len(st.session_state.cart) == 0:
+
+            st.error("No assets scanned")
             st.stop()
 
         for asset in st.session_state.cart:
@@ -211,13 +255,42 @@ elif st.session_state.mode == "checkout":
             row_index, item = find_row(asset)
 
             if row_index:
-                inventory_sheet.update_cell(row_index, 9, "Checked Out")
-                inventory_sheet.update_cell(row_index, 11, st.session_state.employee)
 
-                add_history("Checkout", asset, st.session_state.employee)
+                inventory_sheet.update_cell(
+                    row_index,
+                    9,
+                    "Checked Out"
+                )
+
+                inventory_sheet.update_cell(
+                    row_index,
+                    11,
+                    st.session_state.employee
+                )
+
+                add_history(
+                    "Checkout",
+                    asset,
+                    st.session_state.employee
+                )
 
         st.success("✅ Checkout completed")
 
     if st.button("Done"):
+
+        reset_session()
+        st.rerun()
+
+# =========================
+# CHECKIN
+# =========================
+elif st.session_state.mode == "checkin":
+
+    st.title("📥 Checkin Mode")
+
+    st.info("Checkin scanner next version")
+
+    if st.button("Done"):
+
         reset_session()
         st.rerun()
