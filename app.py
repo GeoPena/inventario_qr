@@ -1,9 +1,9 @@
+import streamlit.components.v1 as components
 import streamlit as st
 import gspread
 import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-import streamlit.components.v1 as components
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -78,33 +78,61 @@ def qr_scanner():
 
     <div id="reader" style="width:100%;"></div>
 
+    <button id="startBtn" style="margin-top:10px;">
+        Start Scanner
+    </button>
+
     <script>
 
-    function onScanSuccess(decodedText) {
+    let html5QrcodeScanner;
 
-        // manda al input de Streamlit
-        const input = window.parent.document.querySelector('input[data-testid="stTextInput"]');
+    document.getElementById("startBtn").onclick = function () {
 
-        if (input) {
-            input.value = decodedText;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear();
         }
-    }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        {
+        html5QrcodeScanner = new Html5Qrcode("reader");
+
+        const config = {
             fps: 10,
             qrbox: 250,
-            facingMode: "environment"
-        }
-    );
+            facingMode: { exact: "environment" }   // 👈 CAMARA TRASERA
+        };
 
-    html5QrcodeScanner.render(onScanSuccess);
+        Html5Qrcode.getCameras().then(devices => {
+
+            let cameraId = devices[0].id;
+
+            // intenta encontrar cámara trasera
+            devices.forEach(d => {
+                if (d.label.toLowerCase().includes("back")) {
+                    cameraId = d.id;
+                }
+            });
+
+            html5QrcodeScanner.start(
+                cameraId,
+                config,
+                (decodedText) => {
+
+                    // manda a streamlit
+                    window.parent.postMessage({
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: decodedText
+                    }, "*");
+
+                }
+            );
+        });
+
+    };
 
     </script>
     """
-    return components.html(scanner_html, height=400)
+
+    return components.html(scanner_html, height=500)
 
 # =========================
 # HOME
@@ -132,15 +160,16 @@ elif st.session_state.mode == "checkout":
 
     st.session_state.employee = st.text_input("Employee Name", st.session_state.employee)
 
-    st.subheader("📷 Scan QR Code")
-    qr_value = st.text_input("QR Result (auto)", key="qr_input")
+    st.subheader("📷 QR Scanner")
 
-    # recibir QR del scanner
+    qr_value = qr_scanner()
+
+    # 🔥 FIX: recibir valor correctamente
     if qr_value:
         st.session_state.qr = qr_value
 
-    # procesar QR
     if st.session_state.qr:
+
         code = st.session_state.qr
 
         row_index, item = find_row(code)
@@ -158,7 +187,6 @@ elif st.session_state.mode == "checkout":
 
         st.session_state.qr = ""
 
-    # CART
     st.subheader("📦 Current Session")
     st.write(st.session_state.cart)
 
