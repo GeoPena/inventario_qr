@@ -29,8 +29,13 @@ client = gspread.authorize(creds)
 
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1dgidhq3iIr2Vt_kxT8VxjU2OrOWzsC39we_AicOR2Gk"
 
-inventory_sheet = client.open_by_url(SPREADSHEET_URL).worksheet("Inventory")
-history_sheet = client.open_by_url(SPREADSHEET_URL).worksheet("History")
+inventory_sheet = client.open_by_url(
+    SPREADSHEET_URL
+).worksheet("Inventory")
+
+history_sheet = client.open_by_url(
+    SPREADSHEET_URL
+).worksheet("History")
 
 # =========================
 # SESSION STATE
@@ -40,7 +45,9 @@ defaults = {
     "employee": "",
     "cart": [],
     "last_scanned": "",
-    "checkin_notes": ""
+    "checkin_notes": "",
+    "manual_checkout": "",
+    "manual_checkin": ""
 }
 
 for k, v in defaults.items():
@@ -52,11 +59,15 @@ for k, v in defaults.items():
 # =========================
 def reset_session():
 
-    st.session_state.mode = "home"
-    st.session_state.employee = ""
-    st.session_state.cart = []
-    st.session_state.last_scanned = ""
-    st.session_state.checkin_notes = ""
+    st.session_state.update({
+        "mode": "home",
+        "employee": "",
+        "cart": [],
+        "last_scanned": "",
+        "checkin_notes": "",
+        "manual_checkout": "",
+        "manual_checkin": ""
+    })
 
 
 def find_row(asset_id):
@@ -91,9 +102,11 @@ def remove_from_cart(asset_id):
 
     st.session_state.last_scanned = ""
 
+    st.rerun()
+
 
 # =========================
-# PROCESS SCAN (QR + MANUAL)
+# PROCESS SCAN
 # =========================
 def process_scan(value):
 
@@ -101,6 +114,9 @@ def process_scan(value):
         return
 
     value = value.strip()
+
+    if value == "":
+        return
 
     if value == st.session_state.last_scanned:
         return
@@ -135,6 +151,10 @@ def process_scan(value):
 
         st.success(f"✅ Added {value} — {item_name}")
 
+        st.session_state.manual_checkout = ""
+
+        st.rerun()
+
     # =========================
     # CHECKIN
     # =========================
@@ -158,7 +178,13 @@ def process_scan(value):
 
         st.success(f"✅ Checked in {value}")
 
-        st.session_state.checkin_notes = ""
+        st.session_state.update({
+            "checkin_notes": "",
+            "manual_checkin": "",
+            "last_scanned": ""
+        })
+
+        st.rerun()
 
 
 # =========================
@@ -171,12 +197,16 @@ if st.session_state.mode == "home":
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("📤 CHECKOUT"):
+
+        if st.button("📤 CHECKOUT", use_container_width=True):
+
             st.session_state.mode = "checkout"
             st.rerun()
 
     with col2:
-        if st.button("📥 CHECKIN"):
+
+        if st.button("📥 CHECKIN", use_container_width=True):
+
             st.session_state.mode = "checkin"
             st.rerun()
 
@@ -188,74 +218,115 @@ elif st.session_state.mode == "checkout":
 
     st.title("📤 Checkout Mode")
 
-    st.text_input("Employee Name", key="employee")
+    st.text_input(
+        "Employee Name",
+        key="employee"
+    )
 
     st.subheader("📷 Scan Asset")
 
     qr_value = qrcode_scanner()
 
-    # QR input
     process_scan(qr_value)
 
-    # MANUAL INPUT (fallback)
-    manual_value = st.text_input("Or enter Asset ID manually")
+    # =========================
+    # MANUAL INPUT
+    # =========================
+    manual_value = st.text_input(
+        "Or enter Asset ID manually",
+        key="manual_checkout"
+    )
 
     if manual_value:
         process_scan(manual_value)
-        st.session_state["manual_checkout"] = ""
-
 
     # =========================
-    # CART UI
+    # CART
     # =========================
     st.subheader("📦 Current Session")
 
     if len(st.session_state.cart) == 0:
+
         st.info("No items scanned yet")
 
     for item in st.session_state.cart:
 
-        col1, col2 = st.columns([4, 1])
+        col1, col2 = st.columns([5, 1])
 
         with col1:
-            st.write(f"🔹 {item['id']} — {item['name']}")
+
+            st.write(
+                f"🔹 {item['id']} — {item['name']}"
+            )
 
         with col2:
-            if st.button("❌", key=f"remove_{item['id']}"):
-                remove_from_cart(item["id"])
-                st.rerun()
+
+            st.button(
+                "❌",
+                key=f"remove_{item['id']}",
+                on_click=remove_from_cart,
+                args=(item["id"],)
+            )
 
     # =========================
     # PROCESS CHECKOUT
     # =========================
-    if st.button("Process Checkout"):
+    if st.button(
+        "Process Checkout",
+        use_container_width=True
+    ):
 
         if not st.session_state.employee:
+
             st.error("Employee required")
             st.stop()
 
         if len(st.session_state.cart) == 0:
+
             st.error("No assets scanned")
             st.stop()
 
         for item in st.session_state.cart:
 
             asset = item["id"]
+
             row_index, row = find_row(asset)
 
             if row_index:
 
-                inventory_sheet.update_cell(row_index, 9, "Checked Out")
-                inventory_sheet.update_cell(row_index, 11, st.session_state.employee)
+                inventory_sheet.update_cell(
+                    row_index,
+                    9,
+                    "Checked Out"
+                )
 
-                add_history("Checkout", asset, st.session_state.employee)
+                inventory_sheet.update_cell(
+                    row_index,
+                    11,
+                    st.session_state.employee
+                )
+
+                add_history(
+                    "Checkout",
+                    asset,
+                    st.session_state.employee
+                )
 
         st.success("✅ Checkout completed")
 
         st.session_state.cart = []
         st.session_state.last_scanned = ""
 
-    if st.button("Done"):
+        st.rerun()
+
+    # =========================
+    # DONE
+    # =========================
+    if st.button(
+        "Done",
+        use_container_width=True
+    ):
+
         reset_session()
         st.rerun()
 
@@ -279,14 +350,24 @@ elif st.session_state.mode == "checkin":
 
     process_scan(qr_value)
 
-    # MANUAL INPUT (fallback)
-    manual_value = st.text_input("Or enter Asset ID manually")
+    # =========================
+    # MANUAL INPUT
+    # =========================
+    manual_value = st.text_input(
+        "Or enter Asset ID manually",
+        key="manual_checkin"
+    )
 
     if manual_value:
         process_scan(manual_value)
-        st.session_state["manual_checkin"] = ""
 
+    # =========================
+    # DONE
+    # =========================
+    if st.button(
+        "Done",
+        use_container_width=True
+    ):
 
-    if st.button("Done"):
         reset_session()
         st.rerun()
