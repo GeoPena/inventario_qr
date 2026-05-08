@@ -11,7 +11,40 @@ st.set_page_config(
     page_title="Asset Management",
     layout="centered"
 )
+col1, col2, col3 = st.columns([1,2,1])
 
+with col2:
+    st.image("logo.png", width=250)
+
+st.markdown("""
+<style>
+
+/* BOTONES */
+.stButton button {
+    border-radius: 12px;
+    height: 3em;
+    font-weight: bold;
+    border: none;
+    transition: 0.3s;
+}
+
+/* HOVER */
+.stButton button:hover {
+    transform: scale(1.02);
+}
+
+/* INPUTS */
+.stTextInput input {
+    border-radius: 10px;
+}
+
+/* TITULOS */
+h1, h2, h3 {
+    color: #1E3A5F;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # =========================
 # GOOGLE SHEETS AUTH
 # =========================
@@ -192,7 +225,18 @@ def process_scan(value):
 # =========================
 if st.session_state.mode == "home":
 
-    st.title("🔧 Asset Management System")
+    st.markdown(
+    """
+    <h1 style='text-align: center;'>
+        Asset Management
+    </h1>
+
+    <h4 style='text-align: center; color: gray;'>
+        Marbella Landscaping
+    </h4>
+    """,
+    unsafe_allow_html=True
+)
 
     col1, col2 = st.columns(2)
 
